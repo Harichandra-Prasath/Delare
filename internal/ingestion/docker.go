@@ -9,7 +9,7 @@ import (
 
 const DOCKER_SOCK_PATH = "/var/run/docker.sock"
 
-func GetDockerClient() *http.Client {
+func getDockerClient() *http.Client {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return net.Dial("unix", DOCKER_SOCK_PATH)

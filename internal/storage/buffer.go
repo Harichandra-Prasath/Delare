@@ -18,10 +18,12 @@ type RingBuffer struct {
 
 var GlobalRingBuffer *RingBuffer
 
-func InitialiseRingBuffer(size uint64) {
+const BUFFER_SLOT_SIZE = 64
+
+func InitialiseRingBuffer() {
 	GlobalRingBuffer = &RingBuffer{
-		mask:  size - 1,
-		slots: make([]atomic.Pointer[[]byte], size),
+		mask:  BUFFER_SLOT_SIZE - 1,
+		slots: make([]atomic.Pointer[[]byte], BUFFER_SLOT_SIZE),
 	}
 }
 

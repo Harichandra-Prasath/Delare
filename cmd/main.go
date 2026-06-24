@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -42,19 +43,17 @@ func main() {
 	}
 
 	logging.InitialiseLogger(cfg.LogLevel)
-	client := ingestion.GetDockerClient()
 	err = storage.InitialiseLSWriter()
 	if err != nil {
 		panic(err)
 	}
 
-	storage.InitialiseRingBuffer(64)
+	storage.InitialiseRingBuffer()
 
+	agent := ingestion.GetAgent()
 	containers := strings.Split(cfg.Containers, ",")
-	for _, cntr := range containers {
-		logging.Logger.Info("starting ingestion loop", "container", cntr)
-		go ingestion.StreamLogs(client, cntr)
-	}
+	go agent.StartControlPanel(context.Background(), containers)
+	logging.Logger.Info("delared started!")
 
 	if err = storage.Dispatch(); err != nil {
 		panic(err)

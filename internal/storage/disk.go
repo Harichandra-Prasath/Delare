@@ -79,7 +79,7 @@ func (L *LogSegmentWriter) flushtoDisk(data *[]byte) error {
 			return fmt.Errorf("error rotating new file: %s", err.Error())
 		}
 		L.file = file
-		logging.Logger.Info("log segment writer rotated with new file", "file", fp)
+		logging.Logger.Info("log segment writer with new segment", "file", fp)
 		L.rotate = false
 		L.bytesWritten = 0
 	}
@@ -93,5 +93,6 @@ func (L *LogSegmentWriter) flushtoDisk(data *[]byte) error {
 		logging.Logger.Info("current segment exceeded the max size and will be rotated", "current", L.bytesWritten, "max", L.maxSize)
 		L.rotate = true
 	}
+	logging.Logger.Info("new chunk written to the segment")
 	return nil
 }

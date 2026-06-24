@@ -1,6 +1,7 @@
 package ingestion
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -11,16 +12,28 @@ import (
 	"github.com/Harichandra-Prasath/Delare/internal/storage"
 )
 
-func StreamLogs(client *http.Client, name string) {
+func StreamLogs(ctx context.Context, client *http.Client, name string) {
 	url := fmt.Sprintf("http://localhost/v1.45/containers/%s/logs?stdout=true&stderr=true&follow=true&timestamps=true", name)
 
-	resp, err := client.Get(url)
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+	resp, err := client.Do(req)
 	if err != nil {
 		logging.Logger.Error("error in http streaming call", "container", name, "error", err.Error())
 		logging.Logger.Info("closing streaming of logs", "container", name)
 		return
 	}
 
+	if resp.StatusCode == http.StatusNotFound {
+		logging.Logger.Warn("container not found", "container", name)
+		return
+	} else if resp.StatusCode == http.StatusInternalServerError {
+		logging.Logger.Warn("internal server error from docker", "container", name)
+		return
+	} else {
+		logging.Logger.Info("container found", "name", name)
+	}
+
+	logging.Logger.Info("starting ingestion loop", "container", name)
 	header := make([]byte, 8)
 	for {
 		if _, err := io.ReadFull(resp.Body, header); err != nil {
