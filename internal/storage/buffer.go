@@ -18,7 +18,7 @@ type RingBuffer struct {
 
 var GlobalRingBuffer *RingBuffer
 
-const BUFFER_SLOT_SIZE = 64
+const BUFFER_SLOT_SIZE = 8192
 
 func InitialiseRingBuffer() {
 	GlobalRingBuffer = &RingBuffer{

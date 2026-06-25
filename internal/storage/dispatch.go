@@ -5,14 +5,15 @@ import (
 	"time"
 
 	"github.com/Harichandra-Prasath/Delare/internal/arena"
+	"github.com/Harichandra-Prasath/Delare/internal/logging"
 )
 
 const (
 	BUFFER_SIZE    = 64 * 1024
-	FLUSH_DURATION = 500 // In Milliseconds
+	FLUSH_DURATION = 1000 // In Milliseconds
 )
 
-func Dispatch() error {
+func Dispatch(errChan chan error) {
 	batchBuffer := make([]byte, 0, BUFFER_SIZE)
 	ticker := time.NewTicker(FLUSH_DURATION * time.Millisecond)
 
@@ -20,8 +21,10 @@ func Dispatch() error {
 		select {
 		case <-ticker.C:
 			if len(batchBuffer) > 0 {
-				if err := GlobalLSWriter.flushtoDisk(&batchBuffer); err != nil {
-					return fmt.Errorf("flushing to disk: %s", err.Error())
+				logging.Logger.Debug("reached flush duration. flushing current buffer")
+				if err := GlobalLSWriter.flushtoDisk(batchBuffer); err != nil {
+					errChan <- fmt.Errorf("flushing to disk: %s", err.Error())
+					return
 				}
 				batchBuffer = batchBuffer[:0]
 			}
@@ -31,8 +34,10 @@ func Dispatch() error {
 				arena.BufferPool.Put(payload)
 
 				if len(batchBuffer) >= BUFFER_SIZE {
-					if err := GlobalLSWriter.flushtoDisk(&batchBuffer); err != nil {
-						return fmt.Errorf("flushing to disk: %s", err.Error())
+					logging.Logger.Debug("reached max buffer size. flushing current buffer")
+					if err := GlobalLSWriter.flushtoDisk(batchBuffer); err != nil {
+						errChan <- fmt.Errorf("flushing to disk: %s", err.Error())
+						return
 					}
 					batchBuffer = batchBuffer[:0]
 					ticker.Reset(FLUSH_DURATION * time.Millisecond)

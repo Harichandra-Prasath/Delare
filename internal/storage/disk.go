@@ -1,11 +1,11 @@
 package storage
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Harichandra-Prasath/Delare/internal/logging"
 )
@@ -67,13 +67,10 @@ func InitialiseLSWriter() error {
 	return nil
 }
 
-func (L *LogSegmentWriter) flushtoDisk(data *[]byte) error {
+func (L *LogSegmentWriter) flushtoDisk(data []byte) error {
 	if L.rotate {
-		data := *data
-		ts := string(data[:30])
-		t, _ := time.Parse(time.RFC3339Nano, ts)
-		name := t.UnixMicro()
-		fp := filepath.Join(DELARE_DIRECTORY, fmt.Sprintf("%020d.log", name))
+		ts := binary.BigEndian.Uint64(data[6:14])
+		fp := filepath.Join(DELARE_DIRECTORY, fmt.Sprintf("%d.log", ts))
 		file, err := os.OpenFile(fp, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return fmt.Errorf("error rotating new file: %s", err.Error())
@@ -84,7 +81,7 @@ func (L *LogSegmentWriter) flushtoDisk(data *[]byte) error {
 		L.bytesWritten = 0
 	}
 
-	n, err := L.file.Write(*data)
+	n, err := L.file.Write(data)
 	if err != nil {
 		return fmt.Errorf("writing to disk: %s", err.Error())
 	}

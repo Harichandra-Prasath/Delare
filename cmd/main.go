@@ -52,10 +52,15 @@ func main() {
 
 	agent := ingestion.GetAgent()
 	containers := strings.Split(cfg.Containers, ",")
-	go agent.StartControlPanel(context.Background(), containers)
-	logging.Logger.Info("delared started!")
 
-	if err = storage.Dispatch(); err != nil {
-		panic(err)
+	errChan := make(chan error)
+	logging.Logger.Info("delared starting!!")
+	go agent.StartControlPanel(context.Background(), containers, errChan)
+	go storage.Dispatch(errChan)
+	for {
+		select {
+		case err := <-errChan:
+			panic(err)
+		}
 	}
 }

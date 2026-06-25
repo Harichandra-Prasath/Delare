@@ -25,7 +25,7 @@ func GetAgent() *Agent {
 	return &Agent{client: getDockerClient(), active: map[string]context.CancelFunc{}}
 }
 
-func (A *Agent) StartControlPanel(ctx context.Context, containers []string) {
+func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errChan chan error) {
 	// Initial bootup
 	for _, cntr := range containers {
 		A.startStream(ctx, cntr)
@@ -37,13 +37,13 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string) {
 	url := fmt.Sprintf("http://localhost/v1.54/events?filters=%s", string(js))
 	resp, err := A.client.Get(url)
 	if err != nil {
-		logging.Logger.Error("error in getting events", "error", err.Error())
+		errChan <- fmt.Errorf("error in getting events: %s", err.Error())
 		return
+
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		logging.Logger.Error("recieved an non ok status code on events", "code", resp.StatusCode)
-		logging.Logger.Info("control panel cannot be started")
+		errChan <- fmt.Errorf("recieved an non ok status code on events. code: %d", resp.StatusCode)
 		return
 	}
 	defer resp.Body.Close()
