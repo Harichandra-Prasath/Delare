@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Harichandra-Prasath/Delare/internal/logging"
+	"github.com/Harichandra-Prasath/Delare/internal/storage"
 )
 
 type Agent struct {
@@ -27,8 +28,10 @@ func GetAgent() *Agent {
 
 func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errChan chan error) {
 	// Initial bootup
+
 	for _, cntr := range containers {
-		A.startStream(ctx, cntr)
+		ts := storage.CPManager.Get(cntr)
+		A.startStream(ctx, cntr, ts)
 	}
 
 	v := map[string][]string{"container": containers, "event": {"start", "die"}, "type": {"container"}}
@@ -59,7 +62,7 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 		switch ev.Status {
 		case "start":
 			logging.Logger.Info("start event recieved", "container", name)
-			A.startStream(ctx, name)
+			A.startStream(ctx, name, storage.CPManager.Get(name))
 		case "die":
 			logging.Logger.Info("die event recieved", "container", name)
 			A.removeStream(name)
@@ -67,16 +70,22 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 	}
 }
 
-func (A *Agent) startStream(parentCtx context.Context, name string) {
+func (A *Agent) startStream(parentCtx context.Context, name string, timestamp uint64) {
 	A.activeLock.Lock()
 	defer A.activeLock.Unlock()
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	A.active[name] = cancel
 
+	// Convert to unix seconds from micro
+	seconds := timestamp / 1000000
+	microSeconds := timestamp % 1000000
+
+	timeString := fmt.Sprintf("%d.%08d", seconds, microSeconds)
+
 	go func() {
 		defer cancel()
-		StreamLogs(ctx, A.client, name)
+		StreamLogs(ctx, A.client, name, timeString)
 	}()
 }
 

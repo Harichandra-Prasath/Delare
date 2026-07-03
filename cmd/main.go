@@ -49,14 +49,20 @@ func main() {
 	}
 
 	storage.InitialiseRingBuffer()
+	err = storage.InitialiseCheckPointManager()
+	if err != nil {
+		panic(err)
+	}
 
 	agent := ingestion.GetAgent()
 	containers := strings.Split(cfg.Containers, ",")
 
 	errChan := make(chan error)
 	logging.Logger.Info("delared starting!!")
-	go agent.StartControlPanel(context.Background(), containers, errChan)
+
 	go storage.Dispatch(errChan)
+	go storage.CPManager.Start(errChan)
+	go agent.StartControlPanel(context.Background(), containers, errChan)
 	for {
 		select {
 		case err := <-errChan:

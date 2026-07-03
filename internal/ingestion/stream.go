@@ -14,9 +14,8 @@ import (
 	"github.com/Harichandra-Prasath/Delare/internal/storage"
 )
 
-func StreamLogs(ctx context.Context, client *http.Client, name string) {
-	url := fmt.Sprintf("http://localhost/v1.45/containers/%s/logs?stdout=true&stderr=true&follow=true&timestamps=true", name)
-
+func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoint string) {
+	url := fmt.Sprintf("http://localhost/v1.45/containers/%s/logs?stdout=true&stderr=true&follow=true&timestamps=true&since=%s", name, checkpoint)
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -36,6 +35,7 @@ func StreamLogs(ctx context.Context, client *http.Client, name string) {
 	}
 
 	logging.Logger.Info("starting ingestion loop", "container", name)
+	logging.Logger.Info("ingesting logs after the last checkpoint", "checkpoint", checkpoint, "container", name)
 	header := make([]byte, 8)
 	for {
 		if _, err := io.ReadFull(resp.Body, header); err != nil {
@@ -46,7 +46,6 @@ func StreamLogs(ctx context.Context, client *http.Client, name string) {
 			logging.Logger.Error("error in reading header", "container", name, "error", err.Error())
 			continue
 		}
-
 		// Last 4 bytes indicates the following payload size
 		payloadSize := binary.BigEndian.Uint32(header[4:8])
 
@@ -72,6 +71,7 @@ func StreamLogs(ctx context.Context, client *http.Client, name string) {
 		t, _ := time.Parse(time.RFC3339Nano, ts)
 		ut := uint64(t.UnixMicro())
 		protocol.EncodeLog(buf, ut, 1)
+		storage.CPManager.Update(name, ut)
 		if ok := storage.GlobalRingBuffer.Push(bufPtr); !ok {
 			logging.Logger.Debug("dropping logs due to high ingestion rate. consider increasing the ring buffer slots")
 			arena.BufferPool.Put(bufPtr)
