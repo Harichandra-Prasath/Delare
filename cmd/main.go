@@ -43,13 +43,14 @@ func main() {
 	}
 
 	logging.InitialiseLogger(cfg.LogLevel)
-	err = storage.InitialiseLSWriter()
+
+	storage.InitialiseRingBuffer()
+	err = storage.InitialiseCheckPointManager()
 	if err != nil {
 		panic(err)
 	}
 
-	storage.InitialiseRingBuffer()
-	err = storage.InitialiseCheckPointManager()
+	err = storage.InitialiseDiskWriter()
 	if err != nil {
 		panic(err)
 	}

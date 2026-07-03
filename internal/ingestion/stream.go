@@ -14,7 +14,7 @@ import (
 	"github.com/Harichandra-Prasath/Delare/internal/storage"
 )
 
-func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoint string) {
+func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoint string, lastTimestamp uint64) {
 	url := fmt.Sprintf("http://localhost/v1.45/containers/%s/logs?stdout=true&stderr=true&follow=true&timestamps=true&since=%s", name, checkpoint)
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 	resp, err := client.Do(req)
@@ -66,10 +66,13 @@ func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoin
 			arena.BufferPool.Put(bufPtr)
 			continue
 		}
-
 		ts := string(buf[protocol.HEADER_SIZE : protocol.HEADER_SIZE+30])
 		t, _ := time.Parse(time.RFC3339Nano, ts)
 		ut := uint64(t.UnixMicro())
+		if ut <= lastTimestamp {
+			logging.Logger.Debug("recieved logs newer than last checkpoint but older than last timestamp")
+			continue
+		}
 		protocol.EncodeLog(buf, ut, 1)
 		storage.CPManager.Update(name, ut)
 		if ok := storage.GlobalRingBuffer.Push(bufPtr); !ok {

@@ -81,11 +81,11 @@ func (A *Agent) startStream(parentCtx context.Context, name string, timestamp ui
 	seconds := timestamp / 1000000
 	microSeconds := timestamp % 1000000
 
-	timeString := fmt.Sprintf("%d.%08d", seconds, microSeconds)
-
+	timeString := fmt.Sprintf("%d.%d", seconds, microSeconds)
+	fmt.Println(timeString)
 	go func() {
 		defer cancel()
-		StreamLogs(ctx, A.client, name, timeString)
+		StreamLogs(ctx, A.client, name, timeString, storage.GlobalDiskWriter.LastLogTimestamp)
 	}()
 }
 
