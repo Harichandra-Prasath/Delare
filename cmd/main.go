@@ -45,6 +45,10 @@ func main() {
 	logging.InitialiseLogger(cfg.LogLevel)
 
 	storage.InitialiseRingBuffer()
+	err = storage.InitialiseMapper()
+	if err != nil {
+		panic(err)
+	}
 	err = storage.InitialiseCheckPointManager()
 	if err != nil {
 		panic(err)

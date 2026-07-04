@@ -30,8 +30,7 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 	// Initial bootup
 
 	for _, cntr := range containers {
-		ts := storage.CPManager.Get(cntr)
-		A.startStream(ctx, cntr, ts)
+		A.startStream(ctx, cntr)
 	}
 
 	v := map[string][]string{"container": containers, "event": {"start", "die"}, "type": {"container"}}
@@ -62,7 +61,7 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 		switch ev.Status {
 		case "start":
 			logging.Logger.Info("start event recieved", "container", name)
-			A.startStream(ctx, name, storage.CPManager.Get(name))
+			A.startStream(ctx, name)
 		case "die":
 			logging.Logger.Info("die event recieved", "container", name)
 			A.removeStream(name)
@@ -70,22 +69,29 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 	}
 }
 
-func (A *Agent) startStream(parentCtx context.Context, name string, timestamp uint64) {
+func (A *Agent) startStream(parentCtx context.Context, name string) {
 	A.activeLock.Lock()
 	defer A.activeLock.Unlock()
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	A.active[name] = cancel
 
+	containerId, err := storage.GlobalMapper.GetOrAdd(name)
+	if err != nil {
+		logging.Logger.Error("error getting the container id", "err", err, "container", name)
+		logging.Logger.Error("stream not started for container", "container", name)
+		return
+	}
+
+	timestamp := storage.CPManager.Get(containerId)
 	// Convert to unix seconds from micro
 	seconds := timestamp / 1000000
 	microSeconds := timestamp % 1000000
 
 	timeString := fmt.Sprintf("%d.%d", seconds, microSeconds)
-	fmt.Println(timeString)
 	go func() {
 		defer cancel()
-		StreamLogs(ctx, A.client, name, timeString, storage.GlobalDiskWriter.LastLogTimestamp)
+		StreamLogs(ctx, A.client, name, containerId, timeString, storage.GlobalDiskWriter.LastContainerTimestamps[containerId])
 	}()
 }
 

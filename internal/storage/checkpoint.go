@@ -13,7 +13,7 @@ import (
 
 type CheckPointManger struct {
 	lock        sync.RWMutex
-	checkpoints map[string]uint64
+	checkpoints map[uint16]uint64
 	filepath    string
 }
 
@@ -23,7 +23,7 @@ const CHECKPOINT_DURATION = 5 * time.Second
 
 func InitialiseCheckPointManager() error {
 	m := &CheckPointManger{
-		checkpoints: make(map[string]uint64),
+		checkpoints: make(map[uint16]uint64),
 		filepath:    filepath.Join(DELARE_DIRECTORY, "checkpoints.json"),
 	}
 	data, err := os.ReadFile(m.filepath)
@@ -42,17 +42,19 @@ func InitialiseCheckPointManager() error {
 	return nil
 }
 
-func (M *CheckPointManger) Update(name string, timestamp uint64) {
+func (M *CheckPointManger) Update(containerId uint16, timestamp uint64) {
 	M.lock.Lock()
 	defer M.lock.Unlock()
 
-	if last, ok := M.checkpoints[name]; !ok || timestamp > last {
-		M.checkpoints[name] = timestamp
+	if last, ok := M.checkpoints[containerId]; !ok || timestamp > last {
+		M.checkpoints[containerId] = timestamp
 	}
 }
 
-func (M *CheckPointManger) Get(name string) uint64 {
-	if ts, ok := M.checkpoints[name]; ok {
+func (M *CheckPointManger) Get(containerId uint16) uint64 {
+	M.lock.RLock()
+	defer M.lock.RUnlock()
+	if ts, ok := M.checkpoints[containerId]; ok {
 		return ts
 	}
 	return 0

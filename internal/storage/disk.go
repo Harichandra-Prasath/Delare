@@ -17,13 +17,13 @@ const (
 var DELARE_DIRECTORY = fmt.Sprintf("%s/.delared/", os.Getenv("HOME"))
 
 type DiskWriter struct {
-	segmentFile         *os.File
-	indexFile           *os.File
-	segmentBytesWritten uint64
-	lastIndexOffset     uint64
-	LastLogTimestamp    uint64
-	maxSegmentSize      uint64
-	rotate              bool
+	segmentFile             *os.File
+	indexFile               *os.File
+	segmentBytesWritten     uint64
+	lastIndexOffset         uint64
+	LastContainerTimestamps map[uint16]uint64
+	maxSegmentSize          uint64
+	rotate                  bool
 }
 
 var GlobalDiskWriter *DiskWriter
@@ -35,7 +35,7 @@ func InitialiseDiskWriter() error {
 	}
 	defer dir.Close()
 
-	dw := &DiskWriter{maxSegmentSize: MAX_SIZE}
+	dw := &DiskWriter{maxSegmentSize: MAX_SIZE, LastContainerTimestamps: make(map[uint16]uint64)}
 
 	names, err := dir.Readdirnames(-1)
 	if err != nil {
@@ -78,7 +78,7 @@ func InitialiseDiskWriter() error {
 		if err != nil {
 			return fmt.Errorf("error getting the last index offset: %s", err)
 		}
-		dw.LastLogTimestamp, err = getLastLogTimestamp(segmentFile, dw.lastIndexOffset)
+		dw.LastContainerTimestamps, err = getLastLogTimestamp(segmentFile, dw.lastIndexOffset)
 		if err != nil {
 			return fmt.Errorf("error getting the last log timestamp: %s", err)
 		}

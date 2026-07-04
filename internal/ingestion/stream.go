@@ -14,7 +14,7 @@ import (
 	"github.com/Harichandra-Prasath/Delare/internal/storage"
 )
 
-func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoint string, lastTimestamp uint64) {
+func StreamLogs(ctx context.Context, client *http.Client, name string, containerId uint16, checkpoint string, lastTimestamp uint64) {
 	url := fmt.Sprintf("http://localhost/v1.45/containers/%s/logs?stdout=true&stderr=true&follow=true&timestamps=true&since=%s", name, checkpoint)
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 	resp, err := client.Do(req)
@@ -37,6 +37,7 @@ func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoin
 	logging.Logger.Info("starting ingestion loop", "container", name)
 	logging.Logger.Info("ingesting logs after the last checkpoint", "checkpoint", checkpoint, "container", name)
 	header := make([]byte, 8)
+	fmt.Println(lastTimestamp)
 	for {
 		if _, err := io.ReadFull(resp.Body, header); err != nil {
 			if err == io.EOF {
@@ -73,8 +74,8 @@ func StreamLogs(ctx context.Context, client *http.Client, name string, checkpoin
 			logging.Logger.Debug("recieved logs newer than last checkpoint but older than last timestamp")
 			continue
 		}
-		protocol.EncodeLog(buf, ut, 1)
-		storage.CPManager.Update(name, ut)
+		protocol.EncodeLog(buf, ut, containerId)
+		storage.CPManager.Update(containerId, ut)
 		if ok := storage.GlobalRingBuffer.Push(bufPtr); !ok {
 			logging.Logger.Debug("dropping logs due to high ingestion rate. consider increasing the ring buffer slots")
 			arena.BufferPool.Put(bufPtr)

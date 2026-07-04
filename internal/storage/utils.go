@@ -39,12 +39,12 @@ func getLastIndexOffset(file *os.File) (uint64, error) {
 	return lastOffset, nil
 }
 
-func getLastLogTimestamp(logFile *os.File, lastIndexOffset uint64) (uint64, error) {
+func getLastLogTimestamp(logFile *os.File, lastIndexOffset uint64) (map[uint16]uint64, error) {
 	if _, err := logFile.Seek(int64(lastIndexOffset), io.SeekStart); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	var lastTimeStamp uint64 = 0
+	containerStates := make(map[uint16]uint64)
 	headerBuf := make([]byte, protocol.HEADER_SIZE)
 
 	for {
@@ -53,18 +53,19 @@ func getLastLogTimestamp(logFile *os.File, lastIndexOffset uint64) (uint64, erro
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				break
 			}
-			return 0, err
+			return nil, err
 		}
 
 		if headerBuf[0] != 0xDE || headerBuf[1] != 0xAD {
-			return 0, fmt.Errorf("corruption detected during tail scan: invalid magic bytes")
+			return nil, fmt.Errorf("corruption detected during tail scan: invalid magic bytes")
 		}
 
 		frameLength := binary.BigEndian.Uint32(headerBuf[2:6])
 		timestamp := binary.BigEndian.Uint64(headerBuf[6:14])
+		containerID := binary.BigEndian.Uint16(headerBuf[14:16])
 
-		if timestamp > lastTimeStamp {
-			lastTimeStamp = timestamp
+		if timestamp > containerStates[containerID] {
+			containerStates[containerID] = timestamp
 		}
 
 		payloadLength := int64(frameLength) - 20
@@ -75,5 +76,5 @@ func getLastLogTimestamp(logFile *os.File, lastIndexOffset uint64) (uint64, erro
 		}
 	}
 
-	return lastTimeStamp, nil
+	return containerStates, nil
 }
