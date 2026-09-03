@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/Harichandra-Prasath/Delare/internal/ingestion"
 	"github.com/Harichandra-Prasath/Delare/internal/logging"
@@ -65,13 +67,19 @@ func main() {
 	errChan := make(chan error)
 	logging.Logger.Info("delared starting!!")
 
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
+
 	go storage.Dispatch(errChan)
 	go storage.CPManager.Start(errChan)
 	go agent.StartControlPanel(context.Background(), containers, errChan)
+
 	for {
 		select {
 		case err := <-errChan:
 			panic(err)
+		case <-stopChan:
+			logging.Logger.Info("End Signal Recieved. Trying to Cleanup resources...")
 		}
 	}
 }

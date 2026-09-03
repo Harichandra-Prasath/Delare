@@ -8,9 +8,11 @@ GO_BUILD := $(GO_CMD) build
 
 LDFLAGS := -s -w
 
-.PHONY: all build generate test clean lint help
+.PHONY: all build
 
-build: generate ## Build the delared binary
+all: build ## Default target, builds the delared binary
+
+build: ## Build the delared binary
 	@echo "==> Building $(BINARY_NAME)..."
 	@mkdir -p $(OUT_DIR)
 	$(GO_BUILD) -ldflags="$(LDFLAGS)" -o $(OUT_DIR)/$(BINARY_NAME) ./cmd/
