@@ -3,11 +3,13 @@ package ingestion
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 
-	"github.com/Harichandra-Prasath/Delare/internal/logging"
 	"github.com/Harichandra-Prasath/Delare/internal/storage"
 )
 
@@ -34,37 +36,58 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 	}
 
 	v := map[string][]string{"container": containers, "event": {"start", "die"}, "type": {"container"}}
-	js, _ := json.Marshal(v)
+	js, err := json.Marshal(v)
+	if err != nil {
+		errChan <- fmt.Errorf("marshaling the event filters: %s", err.Error())
+		return
+	}
 
 	url := fmt.Sprintf("http://localhost/v1.54/events?filters=%s", string(js))
 	resp, err := A.client.Get(url)
 	if err != nil {
 		errChan <- fmt.Errorf("error in getting events: %s", err.Error())
 		return
-
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		errChan <- fmt.Errorf("recieved an non ok status code on events. code: %d", resp.StatusCode)
 		return
 	}
-	defer resp.Body.Close()
-	logging.Logger.Info("control panel started. listening for events")
+
+	slog.Info("control panel started. listening for events")
 	decoder := json.NewDecoder(resp.Body)
 	for {
 		ev := event{}
 		if err := decoder.Decode(&ev); err != nil {
+			if errors.Is(err, io.EOF) {
+				slog.Info("docker event stream closed")
+				return
+			}
+			errChan <- fmt.Errorf("decoding docker event: %s", err.Error())
+			return
 		}
-		attributes := ev.Actor["Attributes"].(map[string]any)
-		name := attributes["name"].(string)
+
+		attributes, ok := ev.Actor["Attributes"].(map[string]any)
+		if !ok {
+			slog.Warn("event has no attributes, skipping", "action", ev.Status)
+			continue
+		}
+		name, ok := attributes["name"].(string)
+		if !ok {
+			slog.Warn("event attributes have no container name, skipping", "action", ev.Status)
+			continue
+		}
 
 		switch ev.Status {
 		case "start":
-			logging.Logger.Info("start event recieved", "container", name)
+			slog.Info("start event recieved", "container", name)
 			A.startStream(ctx, name)
 		case "die":
-			logging.Logger.Info("die event recieved", "container", name)
+			slog.Info("die event recieved", "container", name)
 			A.removeStream(name)
+		default:
+			slog.Debug("unhandled container event", "action", ev.Status, "container", name)
 		}
 	}
 }
@@ -78,8 +101,7 @@ func (A *Agent) startStream(parentCtx context.Context, name string) {
 
 	containerId, err := storage.GlobalMapper.GetOrAdd(name)
 	if err != nil {
-		logging.Logger.Error("error getting the container id", "err", err, "container", name)
-		logging.Logger.Error("stream not started for container", "container", name)
+		slog.Error("stream not started for container", "err", err, "container", name)
 		return
 	}
 

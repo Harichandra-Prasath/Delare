@@ -3,10 +3,10 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Harichandra-Prasath/Delare/internal/arena"
-	"github.com/Harichandra-Prasath/Delare/internal/logging"
 )
 
 const (
@@ -25,7 +25,7 @@ func Dispatch(errChan chan error) {
 		select {
 		case <-ticker.C:
 			if len(batchBuffer) > 0 {
-				logging.Logger.Debug("reached flush duration. flushing current buffer")
+				slog.Debug("reached flush duration. flushing current buffer")
 				if err := GlobalDiskWriter.flushtoDisk(batchBuffer, indexBuffer); err != nil {
 					errChan <- fmt.Errorf("flushing to disk: %s", err.Error())
 					return
@@ -53,7 +53,7 @@ func Dispatch(errChan chan error) {
 				arena.BufferPool.Put(payload)
 
 				if len(batchBuffer) >= SEGMENT_BUFFER_SIZE {
-					logging.Logger.Debug("reached max buffer size. flushing current buffer")
+					slog.Debug("reached max buffer size. flushing current buffer")
 					if err := GlobalDiskWriter.flushtoDisk(batchBuffer, indexBuffer); err != nil {
 						errChan <- fmt.Errorf("flushing to disk: %s", err.Error())
 						return

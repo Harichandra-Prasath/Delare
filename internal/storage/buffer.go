@@ -34,7 +34,7 @@ func (r *RingBuffer) Push(data *[]byte) bool {
 		tail := r.tail.Load()
 
 		// 1. Check if full
-		if head-tail >= uint64(len(r.slots)) {
+		if (head - tail) > uint64(len(r.slots)) {
 			return false // Backpressure: Buffer is full
 		}
 

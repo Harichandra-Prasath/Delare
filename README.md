@@ -33,7 +33,8 @@ The daemon follows a producer-consumer pipeline: `stream -> encode -> ring buffe
 | `internal/protocol` | Custom binary frame encoding |
 | `internal/storage` | Ring buffer, dispatch loop, disk writer, container mapper, checkpoint manager |
 | `internal/arena` | Pooled byte buffers to reduce garbage collection pressure |
-| `internal/logging` | Structured JSON logging via `slog` |
+
+Logging is handled through the standard library `log/slog` default logger, configured in `cmd/main.go`.
 
 All packages use only the Go standard library.
 

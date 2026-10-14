@@ -3,11 +3,10 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/Harichandra-Prasath/Delare/internal/logging"
 )
 
 const (
@@ -106,7 +105,7 @@ func (D *DiskWriter) flushtoDisk(segmentData []byte, indexData []byte) error {
 		D.segmentFile = segmentFile
 		D.indexFile = indexFile
 
-		logging.Logger.Info("log segment writer with new segment", "file", segmentFp)
+		slog.Info("log segment writer with new segment", "file", segmentFp)
 		D.rotate = false
 		D.segmentBytesWritten = 0
 	}
@@ -122,9 +121,9 @@ func (D *DiskWriter) flushtoDisk(segmentData []byte, indexData []byte) error {
 		return fmt.Errorf("writing index to disk: %s", err.Error())
 	}
 	if D.segmentBytesWritten >= D.maxSegmentSize {
-		logging.Logger.Info("current segment exceeded the max size and will be rotated", "current", D.segmentBytesWritten, "max", D.maxSegmentSize)
+		slog.Info("current segment exceeded the max size and will be rotated", "current", D.segmentBytesWritten, "max", D.maxSegmentSize)
 		D.rotate = true
 	}
-	logging.Logger.Info("new chunk written to the segment")
+	slog.Info("new chunk written to the segment")
 	return nil
 }

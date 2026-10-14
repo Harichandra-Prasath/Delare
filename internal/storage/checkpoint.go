@@ -3,12 +3,11 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/Harichandra-Prasath/Delare/internal/logging"
 )
 
 type CheckPointManger struct {
@@ -32,9 +31,9 @@ func InitialiseCheckPointManager() error {
 		if err != nil {
 			return fmt.Errorf("error loading the checkpoints: %s", err)
 		}
-		logging.Logger.Info("checkpoints loaded")
+		slog.Info("checkpoints loaded")
 	} else if os.IsNotExist(err) {
-		logging.Logger.Warn("no checkpoins found. all logs since start will be pulled")
+		slog.Warn("no checkpoints found. all logs since start will be pulled")
 	} else {
 		return fmt.Errorf("error loading the checkpoints: %s", err)
 	}
@@ -93,6 +92,6 @@ func (M *CheckPointManger) flush() error {
 	if err = os.Rename(tmpFile, M.filepath); err != nil {
 		return fmt.Errorf("error writing to checkpoints: %s", err.Error())
 	}
-	logging.Logger.Debug("checkpoints flushed to disk")
+	slog.Debug("checkpoints flushed to disk")
 	return nil
 }

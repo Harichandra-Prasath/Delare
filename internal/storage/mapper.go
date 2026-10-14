@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/Harichandra-Prasath/Delare/internal/logging"
 )
 
 type Mapper struct {
@@ -38,7 +37,7 @@ func InitialiseMapper() error {
 				m.nextID = id + 1
 			}
 		}
-		logging.Logger.Info("Mappings found and initialised..")
+		slog.Info("mappings found and initialised")
 
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("error reading the mappings: %s", err)
