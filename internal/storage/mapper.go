@@ -30,7 +30,7 @@ func InitialiseMapper() error {
 	data, err := os.ReadFile(path)
 	if err == nil {
 		if err := json.Unmarshal(data, &m.NameMap); err != nil {
-			return fmt.Errorf("error unmarshaling the mapper: %s", err)
+			return fmt.Errorf("error unmarshaling the mapper: %w", err)
 		}
 		for _, id := range m.NameMap {
 			if id >= m.nextID {
@@ -40,7 +40,7 @@ func InitialiseMapper() error {
 		slog.Info("mappings found and initialised")
 
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("error reading the mappings: %s", err)
+		return fmt.Errorf("error reading the mappings: %w", err)
 	}
 	GlobalMapper = m
 	return nil
@@ -68,7 +68,7 @@ func (m *Mapper) GetOrAdd(containerName string) (uint16, error) {
 	if err := m.flush(); err != nil {
 		delete(m.NameMap, containerName)
 		m.nextID--
-		return 0, fmt.Errorf("flushing mapper to disk: %s", err)
+		return 0, fmt.Errorf("flushing mapper to disk: %w", err)
 	}
 
 	return newID, nil

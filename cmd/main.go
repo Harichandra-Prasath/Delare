@@ -12,16 +12,17 @@ import (
 
 	"github.com/Harichandra-Prasath/Delare/internal/ingestion"
 	"github.com/Harichandra-Prasath/Delare/internal/storage"
+	"golang.org/x/sync/errgroup"
 )
 
-type Config struct {
+type config struct {
 	LogLevel   string // Log level for delared
 	Containers string // Comma Seperated Container Names
 }
 
-func ParseConfig(args []string) (*Config, error) {
+func ParseConfig(args []string) (*config, error) {
 	fs := flag.NewFlagSet("delared", flag.ContinueOnError)
-	cfg := &Config{}
+	cfg := &config{}
 
 	fs.StringVar(&cfg.Containers, "containers", "", "Comma Seperated list of containers")
 	fs.StringVar(&cfg.LogLevel, "log-level", "info", "Log Level for Delare")
@@ -70,47 +71,54 @@ func main() {
 	}
 
 	initLogger(cfg.LogLevel)
-
-	storage.InitialiseRingBuffer()
-
-	if err := storage.InitialiseMapper(); err != nil {
-		slog.Error("failed to initialise the mapper", "err", err)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, cfg); err != nil {
+		slog.Error("delared terminated with error", "err", err)
 		os.Exit(1)
+	}
+	slog.Info("delared shutdown complete")
+}
+
+func run(ctx context.Context, cfg *config) error {
+	// Core components (Fail fast)
+	storage.InitialiseRingBuffer()
+	if err := storage.InitialiseMapper(); err != nil {
+		return err
 	}
 
 	if err := storage.InitialiseCheckPointManager(); err != nil {
-		slog.Error("failed to initialise the checkpoint manager", "err", err)
-		os.Exit(1)
+		return err
 	}
 
 	if err := storage.InitialiseDiskWriter(); err != nil {
-		slog.Error("failed to initialise the disk writer", "err", err)
-		os.Exit(1)
+		return err
 	}
 
+	g, gCtx := errgroup.WithContext(ctx)
 	agent := ingestion.GetAgent()
+	dispatcher := storage.GetNewDispatcher()
 	containers := strings.Split(cfg.Containers, ",")
 
-	errChan := make(chan error)
-
-	stopChan := make(chan os.Signal, 1)
-	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
-
 	slog.Info("delared starting", "containers", containers)
+	g.Go(func() error {
+		// Example: Dispatch must select on gCtx.Done() internally to exit cleanly
+		return dispatcher.Dispatch(gCtx)
+	})
 
-	go storage.Dispatch(errChan)
-	go storage.CPManager.Start(errChan)
-	go agent.StartControlPanel(context.Background(), containers, errChan)
+	g.Go(func() error {
+		return storage.CPManager.Start(gCtx)
+	})
 
-	for {
-		select {
-		case err := <-errChan:
-			slog.Error("fatal error", "err", err)
-			os.Exit(1)
-		case <-stopChan:
-			slog.Info("shutdown signal received, cleaning up resources")
-			// TODO: Cleanup to be written
-			os.Exit(0)
-		}
-	}
+	g.Go(func() error {
+		return agent.RunControlPanel(gCtx, containers)
+	})
+
+	gErr := g.Wait()
+	slog.Info("shutting down, trying to cleanup...")
+
+	agent.Close()
+	CErr := storage.CPManager.Close()
+	DErr := dispatcher.Close()
+	return errors.Join(gErr, CErr, DErr)
 }

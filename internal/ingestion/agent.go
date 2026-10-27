@@ -17,6 +17,7 @@ type Agent struct {
 	client     *http.Client
 	active     map[string]context.CancelFunc
 	activeLock sync.RWMutex
+	waitGroup  sync.WaitGroup
 }
 
 type event struct {
@@ -28,9 +29,8 @@ func GetAgent() *Agent {
 	return &Agent{client: getDockerClient(), active: map[string]context.CancelFunc{}}
 }
 
-func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errChan chan error) {
+func (A *Agent) RunControlPanel(ctx context.Context, containers []string) error {
 	// Initial bootup
-
 	for _, cntr := range containers {
 		A.startStream(ctx, cntr)
 	}
@@ -38,34 +38,39 @@ func (A *Agent) StartControlPanel(ctx context.Context, containers []string, errC
 	v := map[string][]string{"container": containers, "event": {"start", "die"}, "type": {"container"}}
 	js, err := json.Marshal(v)
 	if err != nil {
-		errChan <- fmt.Errorf("marshaling the event filters: %s", err.Error())
-		return
+		return fmt.Errorf("marshaling the event filters: %w", err)
 	}
 
 	url := fmt.Sprintf("http://localhost/v1.54/events?filters=%s", string(js))
-	resp, err := A.client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		errChan <- fmt.Errorf("error in getting events: %s", err.Error())
-		return
+		return fmt.Errorf("getting events: %w", err)
+	}
+	resp, err := A.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("getting events: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		errChan <- fmt.Errorf("recieved an non ok status code on events. code: %d", resp.StatusCode)
-		return
+		return fmt.Errorf("recieved an non ok status code on events. code: %d", resp.StatusCode)
 	}
 
 	slog.Info("control panel started. listening for events")
+
 	decoder := json.NewDecoder(resp.Body)
 	for {
 		ev := event{}
 		if err := decoder.Decode(&ev); err != nil {
-			if errors.Is(err, io.EOF) {
-				slog.Info("docker event stream closed")
-				return
+			if ctx.Err() != nil {
+				slog.Info("Control Panel Exit Recieved...")
+				return nil
 			}
-			errChan <- fmt.Errorf("decoding docker event: %s", err.Error())
-			return
+
+			if errors.Is(err, io.EOF) {
+				return fmt.Errorf("docker event stream closed")
+			}
+			return fmt.Errorf("decoding docker event: %w", err)
 		}
 
 		attributes, ok := ev.Actor["Attributes"].(map[string]any)
@@ -105,6 +110,7 @@ func (A *Agent) startStream(parentCtx context.Context, name string) {
 		return
 	}
 
+	A.waitGroup.Add(1)
 	timestamp := storage.CPManager.Get(containerId)
 	// Convert to unix seconds from micro
 	seconds := timestamp / 1000000
@@ -113,16 +119,25 @@ func (A *Agent) startStream(parentCtx context.Context, name string) {
 	timeString := fmt.Sprintf("%d.%d", seconds, microSeconds)
 	go func() {
 		defer cancel()
+		defer A.waitGroup.Done()
 		StreamLogs(ctx, A.client, name, containerId, timeString, storage.GlobalDiskWriter.LastContainerTimestamps[containerId])
 	}()
 }
 
-func (a *Agent) removeStream(name string) {
-	a.activeLock.Lock()
-	defer a.activeLock.Unlock()
+func (A *Agent) removeStream(name string) {
+	A.activeLock.Lock()
+	defer A.activeLock.Unlock()
 
-	if cancel, exists := a.active[name]; exists {
+	if cancel, exists := A.active[name]; exists {
 		cancel()
-		delete(a.active, name)
+		delete(A.active, name)
 	}
+}
+
+func (A *Agent) Close() {
+	for name, cancel := range A.active {
+		cancel()
+		delete(A.active, name)
+	}
+	A.waitGroup.Wait()
 }

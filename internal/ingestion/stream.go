@@ -53,6 +53,9 @@ func StreamLogs(ctx context.Context, client *http.Client, name string, container
 				slog.Warn("container stream closed", "container", name)
 				return
 			}
+			if ctx.Err() != nil {
+				return
+			}
 			slog.Error("error in reading header", "err", err, "container", name)
 			continue
 		}

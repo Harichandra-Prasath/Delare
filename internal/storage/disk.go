@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	MAX_SIZE = 10 * 1024 * 1024 // 10MB
+	MAX_SIZE = 100 * 1024 * 1024 // 100MB
 )
 
 var DELARE_DIRECTORY = fmt.Sprintf("%s/.delared/", os.Getenv("HOME"))
@@ -30,7 +30,7 @@ var GlobalDiskWriter *DiskWriter
 func InitialiseDiskWriter() error {
 	dir, err := os.Open(DELARE_DIRECTORY)
 	if err != nil {
-		return fmt.Errorf("error opening delared directory: %s", err.Error())
+		return fmt.Errorf("error opening delared directory: %w", err)
 	}
 	defer dir.Close()
 
@@ -38,7 +38,7 @@ func InitialiseDiskWriter() error {
 
 	names, err := dir.Readdirnames(-1)
 	if err != nil {
-		return fmt.Errorf("error reading file names: %s", err.Error())
+		return fmt.Errorf("error reading file names: %w", err)
 	}
 	var latest string
 	for _, name := range names {
@@ -56,13 +56,13 @@ func InitialiseDiskWriter() error {
 		segmentfp := filepath.Join(DELARE_DIRECTORY, latest)
 		segmentFile, err := os.OpenFile(segmentfp, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 		if err != nil {
-			return fmt.Errorf("error opening the recent segment file: %s", err.Error())
+			return fmt.Errorf("error opening the recent segment file: %w", err)
 		}
 		dw.segmentFile = segmentFile
 		stat, err := segmentFile.Stat()
 		if err != nil {
 			segmentFile.Close()
-			return fmt.Errorf("error on checking stat file: %s", err.Error())
+			return fmt.Errorf("error on checking stat file: %w", err)
 		}
 		dw.segmentBytesWritten = uint64(stat.Size())
 
@@ -70,16 +70,16 @@ func InitialiseDiskWriter() error {
 		indexfp := strings.Replace(segmentfp, "log", "index", 1)
 		indexFile, err := os.OpenFile(indexfp, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 		if err != nil {
-			return fmt.Errorf("error opening the recent index file: %s", err.Error())
+			return fmt.Errorf("error opening the recent index file: %w", err)
 		}
 		dw.indexFile = indexFile
 		dw.lastIndexOffset, err = getLastIndexOffset(indexFile)
 		if err != nil {
-			return fmt.Errorf("error getting the last index offset: %s", err)
+			return fmt.Errorf("error getting the last index offset: %w", err)
 		}
 		dw.LastContainerTimestamps, err = getLastLogTimestamp(segmentFile, dw.lastIndexOffset)
 		if err != nil {
-			return fmt.Errorf("error getting the last log timestamp: %s", err)
+			return fmt.Errorf("error getting the last log timestamp: %w", err)
 		}
 	}
 
@@ -96,11 +96,11 @@ func (D *DiskWriter) flushtoDisk(segmentData []byte, indexData []byte) error {
 
 		segmentFile, err := os.OpenFile(segmentFp, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
-			return fmt.Errorf("error rotating new file: %s", err.Error())
+			return fmt.Errorf("error rotating new file: %w", err)
 		}
 		indexFile, err := os.OpenFile(indexFp, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
-			return fmt.Errorf("error rotating new file: %s", err.Error())
+			return fmt.Errorf("error rotating new file: %w", err)
 		}
 		D.segmentFile = segmentFile
 		D.indexFile = indexFile
@@ -112,13 +112,13 @@ func (D *DiskWriter) flushtoDisk(segmentData []byte, indexData []byte) error {
 
 	n, err := D.segmentFile.Write(segmentData)
 	if err != nil {
-		return fmt.Errorf("writing segment to disk: %s", err.Error())
+		return fmt.Errorf("writing segment to disk: %w", err)
 	}
 	D.segmentBytesWritten += uint64(n)
 
 	_, err = D.indexFile.Write(indexData)
 	if err != nil {
-		return fmt.Errorf("writing index to disk: %s", err.Error())
+		return fmt.Errorf("writing index to disk: %w", err)
 	}
 	if D.segmentBytesWritten >= D.maxSegmentSize {
 		slog.Info("current segment exceeded the max size and will be rotated", "current", D.segmentBytesWritten, "max", D.maxSegmentSize)

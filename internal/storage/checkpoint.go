@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -29,13 +30,13 @@ func InitialiseCheckPointManager() error {
 	if err == nil {
 		err = json.Unmarshal(data, &m.checkpoints)
 		if err != nil {
-			return fmt.Errorf("error loading the checkpoints: %s", err)
+			return fmt.Errorf("error loading the checkpoints: %w", err)
 		}
 		slog.Info("checkpoints loaded")
 	} else if os.IsNotExist(err) {
 		slog.Warn("no checkpoints found. all logs since start will be pulled")
 	} else {
-		return fmt.Errorf("error loading the checkpoints: %s", err)
+		return fmt.Errorf("error loading the checkpoints: %w", err)
 	}
 	CPManager = m
 	return nil
@@ -59,18 +60,29 @@ func (M *CheckPointManger) Get(containerId uint16) uint64 {
 	return 0
 }
 
-func (M *CheckPointManger) Start(errChan chan error) {
+func (M *CheckPointManger) Start(gCtx context.Context) error {
 	ticker := time.NewTicker(CHECKPOINT_DURATION)
 
 	for {
 		select {
+		case <-gCtx.Done():
+			slog.Info("Checkpoint Manger Exit Recieved")
+			ticker.Stop()
+			return nil
 		case <-ticker.C:
 			err := M.flush()
 			if err != nil {
-				errChan <- fmt.Errorf("error in flushing the checkpoints: %s", err.Error())
+				return fmt.Errorf("error in flushing the checkpoints: %w", err)
 			}
 		}
 	}
+}
+
+func (M *CheckPointManger) Close() error {
+	if len(M.checkpoints) > 0 {
+		return M.flush()
+	}
+	return nil
 }
 
 func (M *CheckPointManger) flush() error {
@@ -79,18 +91,18 @@ func (M *CheckPointManger) flush() error {
 
 	data, err := json.Marshal(M.checkpoints)
 	if err != nil {
-		return fmt.Errorf("error marshaling the checkpoints: %s", err.Error())
+		return fmt.Errorf("error marshaling the checkpoints: %w", err)
 	}
 
 	tmpFile := M.filepath + ".tmp"
 
 	err = os.WriteFile(tmpFile, data, 0o644)
 	if err != nil {
-		return fmt.Errorf("error writing to checkpoints: %s", err.Error())
+		return fmt.Errorf("error writing to checkpoints: %w", err)
 	}
 
 	if err = os.Rename(tmpFile, M.filepath); err != nil {
-		return fmt.Errorf("error writing to checkpoints: %s", err.Error())
+		return fmt.Errorf("error writing to checkpoints: %w", err)
 	}
 	slog.Debug("checkpoints flushed to disk")
 	return nil
