@@ -102,6 +102,14 @@ func (D *DiskWriter) flushtoDisk(segmentData []byte, indexData []byte) error {
 		if err != nil {
 			return fmt.Errorf("error rotating new file: %w", err)
 		}
+
+		if D.segmentFile != nil {
+			D.segmentFile.Close()
+		}
+		if D.indexFile != nil {
+			D.indexFile.Close()
+		}
+
 		D.segmentFile = segmentFile
 		D.indexFile = indexFile
 
@@ -126,4 +134,9 @@ func (D *DiskWriter) flushtoDisk(segmentData []byte, indexData []byte) error {
 	}
 	slog.Info("new chunk written to the segment")
 	return nil
+}
+
+func (D *DiskWriter) Close() {
+	D.indexFile.Close()
+	D.segmentFile.Close()
 }

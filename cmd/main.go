@@ -102,7 +102,6 @@ func run(ctx context.Context, cfg *config) error {
 
 	slog.Info("delared starting", "containers", containers)
 	g.Go(func() error {
-		// Example: Dispatch must select on gCtx.Done() internally to exit cleanly
 		return dispatcher.Dispatch(gCtx)
 	})
 
@@ -120,5 +119,8 @@ func run(ctx context.Context, cfg *config) error {
 	agent.Close()
 	CErr := storage.CPManager.Close()
 	DErr := dispatcher.Close()
+
+	storage.GlobalDiskWriter.Close()
+
 	return errors.Join(gErr, CErr, DErr)
 }

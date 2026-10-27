@@ -1,6 +1,6 @@
 # Delare
 
-Delare (binary name `delared`) is a lightweight Docker log aggregation daemon written in Go with zero external dependencies. It streams logs from running containers, encodes them in a compact binary format, and persists them to segmented, indexed files on disk.
+Delare (binary name `delared`) is a lightweight Docker log aggregation daemon written in Go with minimal dependencies. It streams logs from running containers, encodes them in a compact binary format, and persists them to segmented, indexed files on disk.
 
 ## The Problem
 
@@ -11,7 +11,7 @@ Container logs are ephemeral. When a container stops or is removed, its logs are
 - Persists logs in a durable, space-efficient format.
 - Adds minimal overhead and footprint.
 
-Existing solutions tend to be heavy, pulling in large dependency trees and framework layers. Delare is a single binary with no external dependencies, designed to do one thing well: collect Docker container logs and store them durably.
+Existing solutions tend to be heavy, pulling in large dependency trees and framework layers. Delare is a single binary with a minimal dependency footprint, designed to do one thing well: collect Docker container logs and store them durably.
 
 ## How It Works
 
@@ -36,7 +36,7 @@ The daemon follows a producer-consumer pipeline: `stream -> encode -> ring buffe
 
 Logging is handled through the standard library `log/slog` default logger, configured in `cmd/main.go`.
 
-All packages use only the Go standard library.
+All packages use the Go standard library; the only external dependency is the Go team's `golang.org/x/sync` (for `errgroup`, used to coordinate goroutines and shutdown).
 
 ## Custom Binary Protocol
 
@@ -58,7 +58,7 @@ Data is stored under `~/.delared/`.
 
 | File | Purpose |
 |---|---|
-| `<ts>.log` | Segmented log file holding contiguous encoded frames. New segments are created per timestamp and rotate at 10MB. |
+| `<ts>.log` | Segmented log file holding contiguous encoded frames. New segments are created per timestamp and rotate at 100MB. |
 | `<ts>.index` | Paired index file with 16-byte entries (timestamp + file offset) written every 4KB of segment data, allowing time-based lookup. |
 | `mapper.json` | Maps container names to compact `uint16` IDs. |
 | `checkpoints.json` | Per-container last-ingested timestamp, persisted every 5 seconds. |
@@ -88,15 +88,15 @@ delared --containers=<name1,name2,...> [--log-level=<level>]
 
 ## Design Decisions
 
-- **Zero external dependencies**: The Docker client, ring buffer, protocol, and disk writer are all implemented from scratch using only the standard library.
+- **Minimal dependencies**: The Docker client, ring buffer, protocol, and disk writer are all implemented from scratch; the only external module is the Go team's `golang.org/x/sync` (for `errgroup`).
 - **Lock-free ring buffer**: The multi-producer single-consumer ring buffer uses atomic operations with cache-line padding to avoid false sharing and lock contention.
 - **Pooled buffers**: Byte buffers are recycled through a `sync.Pool` to reduce garbage collection pressure under sustained log volume.
 - **Compact binary protocol**: Logs are stored as tightly packed binary frames with CRC32 integrity checks rather than plain text or JSON.
 - **Checkpoint-based resumption**: Ingestion positions are persisted so the daemon resumes exactly where it left off, avoiding duplicate or missing logs across restarts.
+- **Graceful shutdown**: SIGINT/SIGTERM cancel all log streams, wait for them to finish, drain the ring buffer, flush in-flight batches, persist a final checkpoint, and close the segment and index files before exit.
 
 ## Work in Progress
 
-- **Resource cleanup on shutdown**: Graceful handling of SIGTERM/SIGINT is not yet implemented. This includes cancelling active log streams, draining the ring buffer, flushing in-flight batches, closing open file handles, and persisting a final checkpoint before exit.
 - **Replay agent/client**: An interface to read back and decode the persisted binary logs is planned.
 
 ## License
